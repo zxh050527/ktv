@@ -424,23 +424,24 @@ html, body {
 /* Mobile responsive */
 @media (max-width: 480px) {
   .card {
-    width: calc(100vw - 16px);
-    max-width: calc(100vw - 16px);
-    height: calc(100dvh - 32px);
-    max-height: calc(100dvh - 32px);
-    border-radius: 22px;
-    margin: 16px auto 0;
+    width: calc(100vw - 32px);
+    max-width: calc(100vw - 32px);
+    height: calc(100dvh - 16px);
+    max-height: calc(100dvh - 16px);
+    border-radius: 24px;
+    margin: 0 auto;
+    position: relative;
   }
   .stage {
     padding: 0;
   }
   .header {
-    border-radius: 22px 22px 0 0;
-    height: 210px;
+    border-radius: 24px 24px 0 0;
+    height: 220px;
   }
   .body {
-    border-radius: 0;
-    margin-top: -14px;
+    border-radius: 0 0 24px 24px;
+    margin-top: -18px;
   }
   .header-name { font-size: 28px; }
   .header-status { font-size: 13px; padding-left: 38px; }
@@ -452,7 +453,7 @@ html, body {
   .transcript-scroll { padding: 18px 18px 36px; }
   .turn { margin-bottom: 16px; }
   .turn-body { font-size: 15px; }
-  .player { padding: 12px 16px 20px; gap: 12px; }
+  .player { padding: 12px 16px 20px; gap: 12px; border-radius: 0 0 24px 24px; }
   .play-btn { width: 34px; height: 34px; }
   .player-time { font-size: 13px; min-width: 32px; }
   .player-bar { border-radius: 999px; }
