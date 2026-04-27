@@ -424,12 +424,12 @@ html, body {
 /* Mobile responsive */
 @media (max-width: 480px) {
   .card {
-    width: calc(100vw - 32px);
-    max-width: calc(100vw - 32px);
-    height: calc(100dvh - 16px);
-    max-height: calc(100dvh - 16px);
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    height: calc(100dvh - 24px);
+    max-height: calc(100dvh - 24px);
     border-radius: 24px;
-    margin: 0 auto;
+    margin: 12px auto;
     position: relative;
   }
   .stage {
@@ -915,25 +915,40 @@ html, body {
   }
 
   // ---------- Play/pause ----------
+  let isPlaying = false;
+
   function syncPlayButton() {
-    const playing = !audio.paused;
-    iconPause.style.display = playing ? '' : 'none';
-    iconPlay.style.display = playing ? 'none' : '';
-    mpIconPlay.style.display = playing ? 'none' : '';
-    mpIconPause.style.display = playing ? '' : 'none';
-    playBtn.setAttribute('aria-label', playing ? 'Pause' : 'Play');
-    mpBtn.setAttribute('aria-label', playing ? 'Pause song' : 'Play song');
-    dotLive.style.display = playing ? '' : 'none';
-    headerStatus.textContent = playing ? 'Playing…' : 'Paused';
+    iconPause.style.display = isPlaying ? '' : 'none';
+    iconPlay.style.display = isPlaying ? 'none' : '';
+    mpIconPlay.style.display = isPlaying ? 'none' : '';
+    mpIconPause.style.display = isPlaying ? '' : 'none';
+    playBtn.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play');
+    mpBtn.setAttribute('aria-label', isPlaying ? 'Pause song' : 'Play song');
+    dotLive.style.display = isPlaying ? '' : 'none';
+    headerStatus.textContent = isPlaying ? 'Playing…' : 'Paused';
   }
-  audio.addEventListener('play', syncPlayButton);
-  audio.addEventListener('pause', syncPlayButton);
 
   function togglePlay() {
-    if (!audio.src) loadSong(0);
-    if (audio.paused) audio.play().catch(() => {});
-    else audio.pause();
+    if (!audio.src || audio.src === window.location.href) {
+      loadSong(0);
+    }
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      // Unlock AudioContext if needed (first user gesture)
+      ensureAnalyser();
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume().catch(() => {});
+      }
+      // Always play the audio — even if analyser failed (file:// CORS), audio element plays fine
+      audio.play().catch(e => {
+        console.warn('Play failed:', e);
+      });
+    }
   }
+
+  audio.addEventListener('pause', () => { isPlaying = false; syncPlayButton(); });
+  audio.addEventListener('play', () => { isPlaying = true; syncPlayButton(); });
 
   playBtn.addEventListener('click', togglePlay);
   mpBtn.addEventListener('click', togglePlay);
@@ -964,12 +979,16 @@ html, body {
   resizeCanvas();
   window.addEventListener('resize', resizeCanvas);
 
-  // Web Audio analyser
+  // Web Audio analyser (visualisation only, does not alter playback)
   let analyser = null;
   let freqData = null;
   let audioCtx = null;
+  let analyserInited = false;
   function ensureAnalyser() {
-    if (analyser) return;
+    if (analyserInited) return;
+    analyserInited = true;
+    // Skip Web Audio API on file:// protocol (CORS blocks createMediaElementSource)
+    if (location.protocol === 'file:') return;
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     try {
@@ -982,7 +1001,9 @@ html, body {
       analyser.connect(audioCtx.destination);
       freqData = new Uint8Array(analyser.frequencyBinCount);
     } catch (e) {
+      // CORS error: analyser unavailable, but audio element plays normally
       analyser = null;
+      audioCtx = null;
     }
   }
 
@@ -1055,35 +1076,28 @@ html, body {
     requestAnimationFrame(updateUI);
   }
 
-  // Autoplay hook
-  function armAutoplay() {
-    const attempt = () => {
-      ensureAnalyser();
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-      audio.play().catch(() => {});
-    };
-    const cleanup = () => {
-      window.removeEventListener('pointerdown', onGesture);
-      window.removeEventListener('keydown', onGesture);
-      window.removeEventListener('touchstart', onGesture);
-    };
-    const onGesture = () => {
-      if (!audio.paused) { cleanup(); return; }
-      cleanup();
-      attempt();
-    };
-    window.addEventListener('pointerdown', onGesture);
-    window.addEventListener('keydown', onGesture);
-    window.addEventListener('touchstart', onGesture);
-    audio.addEventListener('play', cleanup, { once: true });
-    attempt();
+  // Mobile: unlock AudioContext on first user gesture (no auto-play)
+  function unlockAudio() {
+    ensureAnalyser();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    window.removeEventListener('click', unlockAudio);
+    window.removeEventListener('touchstart', unlockAudio);
   }
+  window.addEventListener('click', unlockAudio, { once: true });
+  window.addEventListener('touchstart', unlockAudio, { once: true });
 
   // ---------- Song ended ----------
   audio.addEventListener('ended', () => {
     const next = (currentIndex + 1) % playlist.length;
     loadSong(next);
-    audio.play().catch(() => {});
+    ensureAnalyser();
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().then(() => {
+        audio.play().catch(() => {});
+      }).catch(() => {});
+    } else {
+      audio.play().catch(() => {});
+    }
   });
 
   // ---------- Init ----------
@@ -1091,7 +1105,6 @@ html, body {
   const songIdx = parseInt(urlParams.get('song')) || 0;
   loadSong(Math.min(Math.max(songIdx, 0), playlist.length - 1));
   syncPlayButton();
-  armAutoplay();
   requestAnimationFrame(updateUI);
 })();
 </script>
